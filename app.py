@@ -3,9 +3,17 @@ from shiny import App, reactive, render, ui
 
 # Add page title and sidebar
 app_ui = ui.page_sidebar(  
-    ui.sidebar("Sidebar", bg="#f8f8f8"),  
-    ui.input_file(
-        "input_file", "Choose CSV File", accept=[".csv"], multiple=False
+    ui.sidebar(
+        ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
+        ui.input_file("input_file", "Choose CSV File", accept=[".csv"], multiple=False),
+        ui.input_checkbox_group(
+            "file_outputs",
+            "Desired File Outputs",
+            choices=["Curve PSD","XML File"],
+            selected=["Curve PSD"],
+        ),
+        ui.input_action_button("submit", "Create File(s)", class_="btn-primary"),
+        title="Inputs"
     ),
     ui.input_checkbox_group(
         "stats",
@@ -14,26 +22,9 @@ app_ui = ui.page_sidebar(
         selected=["Row Count", "Column Count", "Column Names"],
     ),
     ui.output_data_frame("summary"),
-    ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
-    ui.output_text_verbatim("value")
+    # ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
+    # ui.output_text_verbatim("value")
 )  
-
-
-
-# app_ui = ui.page_fluid(
-#     ui.input_file(
-#         "input_file", "Choose CSV File", accept=[".csv"], multiple=False
-#     ),
-#     ui.input_checkbox_group(
-#         "stats",
-#         "Summary Stats",
-#         choices=["Row Count", "Column Count", "Column Names"],
-#         selected=["Row Count", "Column Count", "Column Names"],
-#     ),
-#     ui.output_data_frame("summary"),
-#     ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
-#     ui.output_text_verbatim("value")
-# )
 
 
 def server(input, output, session):
@@ -71,5 +62,10 @@ def server(input, output, session):
     @render.text
     def value():
         return input.text()
+    
+    @render.text()
+    @reactive.event(input.action_button)
+    def counter():
+        return f"{input.action_button()}"
 
 app = App(app_ui, server)
