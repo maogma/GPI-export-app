@@ -12,16 +12,15 @@ app_ui = ui.page_sidebar(
             choices=["Curve PSD","XML File"],
             selected=["Curve PSD"],
         ),
-        ui.input_action_button("preview_btn", "Preview", class_="btn-primary"),
+        # ui.input_action_button("preview_btn", "Preview", class_="btn-primary"),
         title="Inputs"
     ),
-    # ui.input_checkbox_group(
-    #     "stats",
-    #     "Summary Stats",
-    #     choices=["Row Count", "Column Count", "Column Names"],
-    #     selected=["Row Count", "Column Count", "Column Names"],
-    # ),
-    # ui.output_data_frame("summary"),
+    ui.input_select(  
+        "model_select",  
+        "Select a Model to preview:",  
+        {},  
+    ),  
+    ui.output_text("value"),
     ui.output_data_frame("df_preview")
 )  
 
@@ -50,34 +49,6 @@ def server(input, output, session):
         df['RPM(Pump data)'] = df['RPM(Pump data)'].ffill()
 
         return df
-
-    @render.data_frame
-    def summary():
-        df = parsed_file()
-
-        if df.empty:
-            return pd.DataFrame()
-
-        # Get the row count, column count, and column names of the DataFrame
-        row_count = df.shape[0]
-        column_count = df.shape[1]
-        names = df.columns.tolist()
-        column_names = ", ".join(str(name) for name in names)
-
-        # Create a new DataFrame to display the information
-        info_df = pd.DataFrame({
-            "Row Count": [row_count],
-            "Column Count": [column_count],
-            "Column Names": [column_names],
-        })
-
-        # input.stats() is a list of strings; subset the columns based on the selected
-        # checkboxes
-        return info_df.loc[:, input.stats()]
-    
-    @render.text
-    def value():
-        return input.text()
     
 
     # Create class to hold each curve by product number/trim
@@ -97,29 +68,6 @@ def server(input, output, session):
 
         def __repr__(self) -> str:
             return f"Pump Model(name={self.name}, dataframe=\n{self.df})"
-
-
-        # def return_xy_points(self, curveType:str):
-        #     '''
-        #     Returns 2 lists: 1 - flow values, 2 - Head or Power or NPSH
-            
-        #     Parameters:
-        #     curveType (str): The list of y-values. Available options are:
-        #         - 'Head'
-        #         - 'Power'
-        #         - 'NPSH'
-            
-        #     Raises:
-        #     ValueError: If the action is not one of the available options.
-        #     '''
-        #     curve_types = ['Head','Power','NPSH']
-
-        #     if curveType not in curve_types:
-        #         raise ValueError(f"Invalid Curve Type. Available options are: {', '.join(curve_types)}")
-        #     else:
-        #         x_values = self.df['Q'].tolist()
-        #         y_values = self.df[curve_dict[curveType]].tolist()
-        #         return x_values, y_values
         
 
         def create_grouped_trim_curves(self):
@@ -224,7 +172,7 @@ def server(input, output, session):
 
 
     @render.data_frame
-    @reactive.event(input.preview_btn)
+    @reactive.event(input.model_select)
     def df_preview():
         df = parsed_file()
         if df.empty:
@@ -232,23 +180,64 @@ def server(input, output, session):
         
         # Make a model from each group
         grouped = df.groupby('ProductNumber')         # Group by the pump model column
-        group_objects = {}   # Structure: group_objects (dict) where each key = partnumber, value = Curve Object 
+        group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object 
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = input.select()
 
         for partNumber, group_df in grouped:
-            # print(f'partnumber: {partnumber}, group_df: {group_df}')
             group_object = Curve(partNumber=partNumber, dataframe=group_df)
             group_object.create_grouped_trim_curves()
             group_objects[(f'{partNumber}')] = group_object
 
-        # Create a DataFrame for preview
-        preview_data = {
-            "Pump Model": [key for key in group_objects.keys()],
-            "Number of Trims": [len(value.trims) for value in group_objects.values()],
-        }
-        preview_df = pd.DataFrame(preview_data)
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            return selected_curve.df  # Return the DataFrame of the selected Curve object
+        else:
+            return pd.DataFrame()  # Return an empty DataFrame if the selection is invalid
         
-        return preview_df
+        # # Get the first key/value pair
+        # _, first_value = next(iter(group_objects.items()))
+
+        # # return preview_df
+        # return first_value.df
 
     output.df_preview = df_preview
-    
+
+    @reactive.calc
+    def update_select_choices():
+        file = input.input_file()
+        if file is None or len(file) == 0:
+            return {}  # Return empty choices if no file is uploaded
+
+        # Access the file path from the uploaded file
+        file_path = file[0]["datapath"]
+
+        # Read the CSV file into a DataFrame
+        df = pd.read_csv(file_path, sep=";", index_col=False, skip_blank_lines=False)
+        df.replace(',', '.', regex=True, inplace=True)
+        df.dropna(how='all', inplace=True)
+
+        # Forward fill required columns for grouping
+        df['ProductNumber'] = df['ProductNumber'].ffill()
+        df['RPM(Curve nominal)'] = df['RPM(Curve nominal)'].ffill()
+        df['RPM(Pump data)'] = df['RPM(Pump data)'].ffill()
+
+        # Group by 'ProductNumber' and create group_objects
+        grouped = df.groupby('ProductNumber')
+        group_objects = {partNumber: Curve(partNumber=partNumber, dataframe=group_df)
+                        for partNumber, group_df in grouped}
+
+        # Return the choices for the dropdown based on group_objects keys
+        return {key: f"Model {key}" for key in group_objects.keys()}
+
+    # Bind the dropdown choices to the output of update_select_choices
+    @reactive.effect
+    def update_dropdown():
+        choices = update_select_choices()  # Get the updated choices
+        ui.update_select("model_select", choices=update_select_choices())  # Update the dropdown
+
+
+
 app = App(app_ui, server)
