@@ -1,4 +1,5 @@
 import pandas as pd
+import matplotlib.pyplot as plt
 from shiny import App, reactive, render, ui
 
 # Add page title and sidebar
@@ -15,14 +16,18 @@ app_ui = ui.page_sidebar(
         # ui.input_action_button("preview_btn", "Preview", class_="btn-primary"),
         title="Inputs"
     ),
-    ui.input_select(  
-        "model_select",  
-        "Select a Model to preview:",  
-        {},  
-    ),  
-    ui.output_data_frame("df_preview")
-)  
-
+    "ui.layout_columns()",
+    
+    ui.card(
+        ui.card_header("Preview Pump Curves"),
+        ui.input_select("model_select", "Select a Model to preview:", {}),    
+        ui.output_data_frame("df_preview"),
+    ),
+    ui.card(
+        ui.card_header("Curve Data Preview"),
+        ui.output_plot("plot_preview"),  
+    )
+)
 
 # Define the server logic
 def server(input, output, session):
@@ -44,6 +49,8 @@ def server(input, output, session):
 
         # Forward fill productname and curve nominal columns for grouping 
         df['ProductNumber'] = df['ProductNumber'].ffill()
+        df['ProductNumber'] = pd.to_numeric(df['ProductNumber'], errors='coerce').astype(int)     # Cast ProductNumber column to integer
+        df['Product name'] = df['Product name'].ffill()
         df['RPM(Curve nominal)'] = df['RPM(Curve nominal)'].ffill()
         df['RPM(Pump data)'] = df['RPM(Pump data)'].ffill()
 
@@ -62,7 +69,7 @@ def server(input, output, session):
                         for partNumber, group_df in grouped}
 
         # Return the choices for the dropdown based on group_objects keys
-        return {key: f"Model {key}" for key in group_objects.keys()}
+        return {key: f"Partnumber {key}" for key in group_objects.keys()}
 
 
     # Bind the dropdown choices to the output of update_select_choices
@@ -217,6 +224,40 @@ def server(input, output, session):
             return selected_curve.df  # Return the DataFrame of the selected Curve object
         else:
             return pd.DataFrame()  # Return an empty DataFrame if the selection is invalid
+
+    # Render the plot based on the selected model
+    @render.plot
+    @reactive.event(input.model_select)
+    def plot_preview():
+        # Get the parsed file
+        df = parsed_file()
+        if df.empty:
+            return None  # Return nothing if the DataFrame is empty
+
+        # Group by 'ProductNumber' and create group_objects
+        grouped = df.groupby('ProductNumber')
+        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
+                        for partNumber, group_df in grouped}
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = int(input.model_select())
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Plot the data (example: Q vs H)
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(df_selected['Q [m³/h]'], df_selected['H [m]'], marker='o', linestyle='-', color='b')
+            ax.set_title(f"Pump Curve for ProductNumber {input.model_select()}")
+            ax.set_xlabel("Flow Rate (Q) [m³/h]")
+            ax.set_ylabel("Head (H) [m]")
+            ax.grid(True)
+            return fig # Return the figure to be rendered in the plot output
+        else:
+            print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
+            return None  # Return nothing if the selection is invalid
 
 
     output.df_preview = df_preview
