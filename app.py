@@ -17,17 +17,21 @@ app_ui = ui.page_sidebar(
         title="Inputs"
     ),
     "ui.layout_columns()",
-    
-    ui.card(
-        ui.card_header("Preview Pump Curves"),
-        ui.input_select("model_select", "Select a Model to preview:", {}),    
-        ui.output_data_frame("df_preview"),
+    ui.layout_columns(
+        ui.card(
+            ui.card_header("Preview Pump Curves"),
+            ui.input_select("model_select", "Select a Model to preview:", {}),    
+            ui.output_data_frame("df_preview"),
+        ), 
+        ui.card(
+            ui.card_header("Curve Data Preview"),
+            ui.output_plot("qh_preview"),  
+            ui.output_plot("qp2_preview"),  
+            ui.output_plot("qnpsh_preview"),  
+        ),
+        col_widths=(8, 4)
     ),
-    ui.card(
-        ui.card_header("Curve Data Preview"),
-        ui.output_plot("plot_preview"),  
-    )
-)
+)   
 
 # Define the server logic
 def server(input, output, session):
@@ -225,10 +229,10 @@ def server(input, output, session):
         else:
             return pd.DataFrame()  # Return an empty DataFrame if the selection is invalid
 
-    # Render the plot based on the selected model
+    # Render the QH-plot based on the selected model
     @render.plot
     @reactive.event(input.model_select)
-    def plot_preview():
+    def qh_preview():
         # Get the parsed file
         df = parsed_file()
         if df.empty:
@@ -250,9 +254,79 @@ def server(input, output, session):
             # Plot the data (example: Q vs H)
             fig, ax = plt.subplots(figsize=(8, 6))
             ax.plot(df_selected['Q [m³/h]'], df_selected['H [m]'], marker='o', linestyle='-', color='b')
-            ax.set_title(f"Pump Curve for ProductNumber {input.model_select()}")
+            ax.set_title(f"Q vs. H for ProductNumber {input.model_select()}")
             ax.set_xlabel("Flow Rate (Q) [m³/h]")
             ax.set_ylabel("Head (H) [m]")
+            ax.grid(True)
+            return fig # Return the figure to be rendered in the plot output
+        else:
+            print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
+            return None  # Return nothing if the selection is invalid
+        
+
+    # Render the QP2-plot based on the selected model
+    @render.plot
+    @reactive.event(input.model_select)
+    def qp2_preview():
+        # Get the parsed file
+        df = parsed_file()
+        if df.empty:
+            return None  # Return nothing if the DataFrame is empty
+
+        # Group by 'ProductNumber' and create group_objects
+        grouped = df.groupby('ProductNumber')
+        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
+                        for partNumber, group_df in grouped}
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = int(input.model_select())
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Plot the data (example: Q vs H)
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(df_selected['Q [m³/h]'], df_selected['P2 [kW]'], marker='o', linestyle='-', color='b')
+            ax.set_title(f"Q vs. P2 for ProductNumber {input.model_select()}")
+            ax.set_xlabel("Flow Rate (Q) [m³/h]")
+            ax.set_ylabel("Power (P2) [kW]")
+            ax.grid(True)
+            return fig # Return the figure to be rendered in the plot output
+        else:
+            print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
+            return None  # Return nothing if the selection is invalid
+
+
+    # Render the QNPSH-plot based on the selected model
+    @render.plot
+    @reactive.event(input.model_select)
+    def qnpsh_preview():
+        # Get the parsed file
+        df = parsed_file()
+        if df.empty:
+            return None  # Return nothing if the DataFrame is empty
+
+        # Group by 'ProductNumber' and create group_objects
+        grouped = df.groupby('ProductNumber')
+        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
+                        for partNumber, group_df in grouped}
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = int(input.model_select())
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Plot the data (example: Q vs H)
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(df_selected['Q [m³/h]'], df_selected['NPSH [m]'], marker='o', linestyle='-', color='b')
+            ax.set_title(f"Q vs. NPSH for ProductNumber {input.model_select()}")
+            ax.set_xlabel("Flow Rate (Q) [m³/h]")
+            ax.set_ylabel("NPSH [m]")
             ax.grid(True)
             return fig # Return the figure to be rendered in the plot output
         else:
