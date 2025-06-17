@@ -32,7 +32,7 @@ app_ui = ui.page_sidebar(
             ui.output_plot("qp2_preview"),  
             ui.output_plot("qnpsh_preview"),  
         ),
-        col_widths=(8, 4)
+        col_widths=(4, 8)
     ),
 )   
 
@@ -127,6 +127,11 @@ def server(input, output, session):
         def create_grouped_trim_curves(self):
             '''Group entire curve df by the trim/speed column'''
             grouped = self.df.groupby('RPM(Curve nominal)')
+            
+            # Check if there are multiple speeds
+            if len(grouped) > 1:
+                print(f"Multiple speeds found for part number {self.pn}: {list(grouped.groups.keys())}")
+
             for group_trim, trim_df in grouped:
                 self.trim_curves[group_trim] = trim_df[['Q [m³/h]','H [m]','P2 [kW]','NPSH [m]','RPM(Pump data)','RPM(Curve nominal)','RPM(real)']]
 
@@ -259,15 +264,27 @@ def server(input, output, session):
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
-            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # Plot each speed independently
+            for speed, trim_df in selected_curve.trim_curves.items():
+                ax.plot(
+                    trim_df['Q [m³/h]'],
+                    trim_df['H [m]'],
+                    marker='o',
+                    linestyle='-',
+                    label=f"Speed: {speed} RPM"
+                )
 
             # Plot the data (example: Q vs H)
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.plot(df_selected['Q [m³/h]'], df_selected['H [m]'], marker='o', linestyle='-', color='b')
             ax.set_title(f"Q vs. H for ProductNumber {input.model_select()}")
             ax.set_xlabel("Flow Rate (Q) [m³/h]")
             ax.set_ylabel("Head (H) [m]")
             ax.grid(True)
+            ax.legend()
+
             return fig # Return the figure to be rendered in the plot output
         else:
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
@@ -290,20 +307,32 @@ def server(input, output, session):
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
-            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+            # df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # Plot each speed independently
+            for speed, trim_df in selected_curve.trim_curves.items():
+                ax.plot(
+                    trim_df['Q [m³/h]'],
+                    trim_df['P2 [kW]'],
+                    marker='o',
+                    linestyle='-',
+                    label=f"Speed: {speed} RPM"
+                )
 
             # Plot the data (example: Q vs H)
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.plot(df_selected['Q [m³/h]'], df_selected['P2 [kW]'], marker='o', linestyle='-', color='b')
             ax.set_title(f"Q vs. P2 for ProductNumber {input.model_select()}")
             ax.set_xlabel("Flow Rate (Q) [m³/h]")
             ax.set_ylabel("Power (P2) [kW]")
             ax.grid(True)
+            ax.legend()
+            
             return fig # Return the figure to be rendered in the plot output
         else:
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
             return None  # Return nothing if the selection is invalid
-
 
     # Render the QNPSH-plot based on the selected model
     @render.plot
@@ -320,15 +349,27 @@ def server(input, output, session):
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
-            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # Plot each speed independently
+            for speed, trim_df in selected_curve.trim_curves.items():
+                ax.plot(
+                    trim_df['Q [m³/h]'],
+                    trim_df['NPSH [m]'],
+                    marker='o',
+                    linestyle='-',
+                    label=f"Speed: {speed} RPM"
+                )
 
             # Plot the data (example: Q vs H)
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.plot(df_selected['Q [m³/h]'], df_selected['NPSH [m]'], marker='o', linestyle='-', color='b')
             ax.set_title(f"Q vs. NPSH for ProductNumber {input.model_select()}")
             ax.set_xlabel("Flow Rate (Q) [m³/h]")
             ax.set_ylabel("NPSH [m]")
             ax.grid(True)
+            ax.legend()
+            
             return fig # Return the figure to be rendered in the plot output
         else:
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
@@ -682,7 +723,6 @@ def server(input, output, session):
         }
 
         add_elem_from_dict(curveFamily_elem, header_dict)
-
 
         # Here we need to iterate through each trim for each model for creating impeller tags
         for _, model_object in group_objects.items():
