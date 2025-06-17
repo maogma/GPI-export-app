@@ -14,7 +14,7 @@ app_ui = ui.page_sidebar(
             selected=["Yes"],
         ),
         ui.input_action_button("create_psd_file", "Create PSD", class_="btn-primary"),
-        ui.output_text("psd_confirmation"),
+        ui.output_text("psd_creation"),
         ui.input_action_button("create_xml", "Create XML"),
         title="Inputs",
     ),
@@ -338,8 +338,78 @@ def server(input, output, session):
 
     @render.text
     @reactive.event(input.create_psd_file)
-    def psd_confirmation():
-        return "PSD file created successfully!"
+    def psd_creation():
+        import os
+        import shutil
+        from openpyxl import load_workbook
+
+        # This points to the curve PSD template to be used
+        templateDir = r"C:\Users\104092\OneDrive - Grundfos\Documents\3 - RESOURCES\32 GXS"
+        template = "SKB Blank Curve PSD - Power_Metric.xlsx"
+        template = os.path.join(templateDir, template)
+
+        # Create a local working copy to leave template unmodified
+        product = input.pump_family()  # Get the pump family from the input
+        output_psd_file = product + ' - Curve PSD.xlsx'
+        workingCopy = shutil.copyfile(template, output_psd_file)
+        wb = load_workbook(workingCopy)      
+
+        # Add 1 curve tab to workbook for every curve found
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        for object_name in group_objects:
+            curve_pn = group_objects[object_name].pn
+            wb.copy_worksheet(wb['NEW']).title = curve_pn # Creates and renames blank PSD Tab as template for each new curve tab
+
+        # Fill PSD 
+        for object_name in group_objects:
+            curveSheet = wb[group_objects[object_name].pn]
+            baseCell = 'D7' # Fill Curve, power/eff, NPSH data
+            first_row_offset = 3
+
+            # Fill Speed or trim in column A
+            trims = group_objects[object_name].trims
+            for index, eachSpeedTrim in enumerate(trims):
+                cell_name = "{}{}".format('A', 10+index)
+                curveSheet[cell_name].value = int(eachSpeedTrim)
+
+                curve_data_df = group_objects[object_name].trim_curves[eachSpeedTrim].reset_index()
+                for key, value in curve_data_df.iterrows():
+                    # print(f'first_row_offset {first_row_offset}, key: {key + 21*index}')
+                    curveSheet[baseCell].offset(first_row_offset + key, 0 + 21*index).value = round(value['Q [m³/h]'],3)
+                    curveSheet[baseCell].offset(first_row_offset + key, 1 + 21*index).value = round(value['H [m]'], 3)
+                    curveSheet[baseCell].offset(first_row_offset + key, 7 + 21*index).value = round(value['Q [m³/h]'], 3)
+                    # curveSheet[baseCell].offset(first_row_offset + key, 8 + 21*index).value = value['Eta1']
+                    curveSheet[baseCell].offset(first_row_offset + key, 8 + 21*index).value = round(value['P2 [kW]'], 3)
+                    curveSheet[baseCell].offset(first_row_offset + key,14 + 21*index).value = round(value['Q [m³/h]'], 3)
+                    curveSheet[baseCell].offset(first_row_offset + key,15 + 21*index).value = round(value['NPSH [m]'], 3)
+
+        sheet = wb["Curve Header Data"]
+        sheet['B7'] = input.pump_family()  # Fill Pump Family
+        baseCell = 'A1' 
+        first_row_offset = 10
+
+        for index, object_name in enumerate(group_objects):
+            df = group_objects[object_name].df
+            max_speed = int(max(group_objects[object_name].trims))
+            min_speed = int(min(group_objects[object_name].trims))
+                    
+            sheet[baseCell].offset((first_row_offset + index), 0).value = group_objects[object_name].pn
+            sheet[baseCell].offset((first_row_offset + index), 2).value = df.iloc[0]['RPM(Pump data)']
+            sheet[baseCell].offset((first_row_offset + index), 3).value = group_objects[object_name].calc_poles
+            sheet[baseCell].offset((first_row_offset + index), 4).value = group_objects[object_name].frequency
+            sheet[baseCell].offset((first_row_offset + index), 6).value = df.iloc[0]['RPM(Curve nominal)']
+            sheet[baseCell].offset((first_row_offset + index), 7).value = min_speed
+            sheet[baseCell].offset((first_row_offset + index), 8).value = max_speed
+            sheet[baseCell].offset((first_row_offset + index), 9).value = '0' # Diameter Increment
+            # sheet[baseCell].offset((first_row_offset + index), 10).value = group_objects[object_name].get_mcsf('min')
+            # sheet[baseCell].offset((first_row_offset + index), 11).value = group_objects[object_name].get_mcsf('max')
+            sheet[baseCell].offset((first_row_offset + index), 15).value = 'Round up' # Final diameter strategy # 'Round up'Round to nearest'
+            sheet[baseCell].offset((first_row_offset + index), 21).value = min_speed
+
+        wb.save(workingCopy)
+
+        return "Created " + output_psd_file
+
 
     output.df_preview = df_preview
 
