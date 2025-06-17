@@ -16,6 +16,8 @@ app_ui = ui.page_sidebar(
         ui.input_action_button("create_psd_file", "Create PSD", class_="btn-primary"),
         ui.output_text("psd_creation"),
         ui.input_action_button("create_xml", "Create XML"),
+        ui.output_text("xml_creation"),
+
         title="Inputs",
     ),
     ui.layout_columns(
@@ -336,6 +338,11 @@ def server(input, output, session):
     def speed_correct():
         pass
 
+
+    @reactive.calc
+    def add_speed_data():
+        pass
+
     @render.text
     @reactive.event(input.create_psd_file)
     def psd_creation():
@@ -411,6 +418,302 @@ def server(input, output, session):
         return "Created " + output_psd_file
 
 
+    @render.text
+    @reactive.event(input.create_xml)
+    def xml_creation():
+
+        import xml.etree.ElementTree as ET
+
+        group_objects = get_group_objects()
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = input.model_select()
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
+
+        def add_namespace(elem_tag, xsi_namespace):
+            """Adds namespace to root node."""
+            XHTML_NAMESPACE = xsi_namespace
+            XHTML = "{%s}" % XHTML_NAMESPACE
+            NSMAP = {'xsi' : XHTML_NAMESPACE} # the default namespace (no prefix)
+            return ET.Element(elem_tag, nsmap=NSMAP) # lxml only!
+        
+        def add_elem_from_dict(parent_elem, elem_dict={'':''}):
+            """Takes elements inside elem_dict and adds as elements to parent_elem"""
+            if elem_dict:
+                for key, value in elem_dict.items():
+                    elem = ET.SubElement(parent_elem, key)
+                    elem.text = str(value)
+            else:
+                elem = ET.SubElement(parent_elem)
+
+        def create_pump_curve_dict(model_obj) -> dict:
+            """Returns dictionary of updated attributes to be converted to elements """
+
+            # Calculate max_speed and min_speed from the model object's trims
+            max_speed = int(max(model_obj.trims))
+            min_speed = int(min(model_obj.trims))
+
+            pumpCurve_dict = {
+                'curveNumber': model_obj.pn,
+                'speedRef': max_speed,
+                'polesRef': model_obj.calc_poles,
+                'hzRef': '60',
+                'eyeCount': '1',
+                'speedCurveNominal': max_speed,
+                'speedCurveMin': min_speed,
+                'speedCurveMax': max_speed,
+                'diaImpInc': '1.0',
+                # 'mcsfMaxRef': float(model_obj.get_mcsf('max')),
+                # 'mcsfMinRef': float(model_obj.get_mcsf('min')),
+                'speedVariableCurveMin': min_speed,
+                'speedVariableCurveMax': max_speed,
+                # 'optionalCurveType': 'Power',
+                'optionalCurveType': 'Power',
+                'flowStartHeadEnabled': 'true',
+                'flowStartEtaEnabled': 'false',
+                'flowStartPowerEnabled': 'false',
+                'flowStartNPSHEnabled':'false',
+                'flowStopNPSHEnabled':'false',
+                'flowStartSubmergenceEnabled':'true',
+                'extendNpshToMcsfMin':'false',
+                'catalogTrimsSelectionMode':'0',
+                'styleCurveBelowStart':'none',
+                'flowExponentTrim':'1.0',
+                'headExponentTrim':'2.0',
+                'npshExponentTrim':'0.0',
+                'etaExponentTrim':'0.0',
+                'powerDriverFixed':'0.0', # Fixed Motor HP
+                'quantityMotors':'1',
+                'serviceFactorDriverFixed':'1.0',
+                'serviceFactorDriverFixedUsed':'false',
+                'flowExponentSpeed':'1.0',
+                'headExponentSpeed':'2.0',
+                'etaExponentSpeedReduced':'0.0',
+                'etaExponentSpeedIncreased':'0.0',
+                'npshExponentSpeedReduced':'2.0',
+                'npshExponentSpeedIncreased':'2.0',
+                'submergenceExponentSpeedReduced':'2.0',
+                'submergenceExponentSpeedIncreased':'2.0',
+                'hideEfficiencyInSelector':'false',
+                'speedOfSoundRef':'331.6583',
+                'speedOfSoundExpFlow':'1.0',
+                'speedOfSoundExpHead':'2.0',
+                'speedOfSoundExpEta':'0.0',
+                'speedOfSoundExpEtaTotal':'0.0',
+                'temperatureGasInletSkb':'20.0',
+                'pressureGasInletSkb':'1.01325',
+                'relativeHumidityGasSkb':'50.0',
+                'diaRotatingElement':'0.0',
+                'solveVariantDisplayStrategy':'2', # Rounding to nearest: 1, Round up: 2
+                'flowStopPercentBEP':'0.0',
+                'headMarginFixedDia':'3.048', # This is in meters
+                'headMarginFixedDiaPercentage':'0.0',
+                'submergenceVortexMin':'0.0',
+                'submergenceStartupMin':'0.0',
+                'thrustFactor':'0.0',
+                'thrustFactorBalanced':'0.0',
+                'displayBothDiameters':'false',
+                # 'isoEfficiencyValues':'56:62:65:68',
+                'moiFirstStage':'0.0',
+                'moiAdditionalStage':'0.0',
+                'moiPumpCoupling':'0.0',
+                'flowMaxAllowedMinRef':'0.0',
+                'flowMaxAllowedMaxRef':'0.0',
+                'loadRadialRef':'0.0'
+                }
+            
+            return pumpCurve_dict
+        
+        def get_impeller_trim(curve_number:str):
+            # Filter the DataFrame based on a condition in 'column1'
+            condition = df_selected['ProductNumber'] == curve_number
+
+            # result = df.loc[condition, 'Cylindrical\nimpeller']
+            result = df_selected.loc[condition, 'RPM(Curve nominal)'] 
+            result = result.to_list()
+            return(result[0])
+
+        def create_impeller_dict(trim) -> dict:
+            """Creates dict of attributes to add to each Impeller node. """
+            
+            # append_dict contains appropriate values for attributes/tags in updates_list
+            # append_dict = copy_values_from_source_xml(updates_list, new_curve_number)
+            # speed_or_trim = get_impeller_trim(curve_number)
+
+            # If any of the below are important, add tag to updates_list
+            impeller_dict = {
+                'diameter': trim,
+                'flowStartNPSH':'0.0,',
+                'diameterHubSide':'0.0',
+                'weight':'0.0',
+                'surgeFlow':'0.0',
+                'flowStartEta':'0.0',
+                'flowStartHead':'0.0',
+                'flowStartNPSH':'0.0',
+                'flowStartNPSH0Percent':'0.0',
+                'flowStartNPSHIncipient':'0.0',
+                'flowStopNPSH':'0.0',
+                'flowStopNPSH0Percent':'0.0',
+                'flowStopNPSHIncipient':'0.0',
+                'flowStartSubmergence':'0.0',
+                'flowStartPower':'0.0',
+                'powerShutoffFixedEnabled':'false',
+                'powerShutoffFixed':'0.0',
+                'bepFixedEnabled':'true',
+                'solveVariantMin':'0.0',
+                'solveVariantMax':'0.0',
+                'minimumVolumetricEfficiency':'0.0',
+                'minimumVolumetricEfficiencyRated':'0.0',
+                'maximumDifferentialPressure':'0.0',
+                'stopFlow':'0.0'
+            }
+            
+            return(impeller_dict)
+        
+        def _add_curve_data_points(parent_elem, curve_type, df):
+            """ Adds curve data points for flow/power, flow/head, flow/NPSH """
+
+            # Opens relevant curve tab in PSD, and grabs flow, head, power, npsh columns
+            # curve_data_df = pd.read_excel(psd_filepath,sheet_name=curve_number, header=7, skiprows=[8], usecols="D,E,L,S", nrows=50)
+            # curve_data_df = pd.read_excel(psd_filepath,sheet_name=curve_number, names=['Flow','Head','Power','NPSH'], skiprows=[7,8], usecols="D,E,L,S", nrows=50)
+            # curve_data_df = curve_data_df.dropna()
+
+
+            # Iterate through curve data df and create dicts of each data point that will be added as nodes to output xml
+            for _, row in df.iterrows():
+            # for _, model_obj in pump_models.items():
+                datapoint_elem = ET.SubElement(parent_elem, "DataPoint", disabled="false")
+                
+                if curve_type == 'Efficiency':
+                    datapoint_dict = {
+                        # 'x': metric_to_us(row['Flow'], "flow"),
+                        # 'y': metric_to_us(row[curve_type], 'power'),
+                        'x': row['Q [m³/h]'],
+                        'y': row['Eta1'],
+                        'isOnCurve':'false',
+                        'division':'false',
+                        'useCubicSplines':'false',
+                        'slopeEnabled':'false'
+                    }
+                
+                elif curve_type == 'Power':
+                    datapoint_dict = {
+                        # 'x': metric_to_us(row['Flow'], "flow"),
+                        # 'y': metric_to_us(row[curve_type], 'power'),
+                        'x': row['Q [m³/h]'],
+                        'y': row['P2 [kW]'],
+                        'isOnCurve':'false',
+                        'division':'false',
+                        'useCubicSplines':'false',
+                        'slopeEnabled':'false'
+                    }
+
+                elif (curve_type == 'Head'):
+                    datapoint_dict = {
+                        # 'x': metric_to_us(row['Flow'], "flow"),
+                        # 'y': metric_to_us(row[curve_type], 'distance'),
+                        'x': row['Q [m³/h]'],
+                        'y': row['H [m]'],
+                        'isOnCurve':'false',
+                        'division':'false',
+                        'useCubicSplines':'true',
+                        'slopeEnabled':'false'
+                    }
+
+                elif (curve_type == 'NPSH'):
+                    datapoint_dict = {
+                        # 'x': metric_to_us(row['Flow'], "flow"),
+                        # 'y': metric_to_us(row[curve_type], 'distance'),
+                        'x': row['Q [m³/h]'],
+                        'y': row['NPSH [m]'],
+                        'isOnCurve':'false',
+                        'division':'false',
+                        'useCubicSplines':'false',
+                        'slopeEnabled':'false'
+                    }
+
+                else:
+                    print(f'curve_type not allowed: {curve_type}')
+                    
+                add_elem_from_dict(datapoint_elem, datapoint_dict)
+
+        def add_curve(parent_elem, curve_type:str, model_obj, trim):
+            """ Creates <Curve> parent element, and adds specified curve to xml """
+            curve_elem = ET.SubElement(parent_elem, 'Curve', type=curve_type)
+
+            # Add Curve Data Points to Curve Element
+            # _add_curve_data_points(curve_elem, curve_number, curve_type)
+            curve_df = model_obj.trim_curves[trim]
+            _add_curve_data_points(curve_elem, curve_type, curve_df)
+
+        # Create Root Tag using Custom Fields
+        root_ns = "http://www.w3.org/2001/XMLSchema-instance"
+        curve_family_name = input.pump_family()
+        root = add_namespace('SKBData', root_ns)
+        qname = ET.QName(root_ns,"type")
+
+        # Add <CurveFamily> node
+        curveFamily_elem = ET.SubElement(root, "CurveFamily", attrib={
+            'selectorVersion': "8.0.0",
+            'skbVersion': "24.3.0.240819.2070"
+        })
+
+        header_dict = {
+                'name': curve_family_name,
+                'impellerType':'radialFlow',
+                # 'svDataType':'impellerDiamter',
+                # 'interpDataType':'impellerDiamter',
+                'svDataType':'speed',
+                'interpDataType':'speed',
+                'compressorConditionsInputTypeSkb':'speedOfSound',
+                'flowTypeSkb':'volumetricFlow',
+                'headTypeSkb':'head',
+                'headMarginForFixedDiameter':'3.048',
+                'submergenceMethod':'fixedValue',
+                'errorFitMax':'1.5',
+                'pumpType':'0',
+                'interpQty':'3',
+                'efficiencyPowerDataType':'pump',
+                
+        }
+
+        add_elem_from_dict(curveFamily_elem, header_dict)
+
+
+        # Here we need to iterate through each trim for each model for creating impeller tags
+        for _, model_object in group_objects.items():
+            # <pumpCurveCollection xsi:type="CentrifugalPumpCurveCollection"> This is the parent of each pump curve"
+            pumpCurveCollection_elem = ET.SubElement(curveFamily_elem, 'pumpCurveCollection', {qname: "CentrifugalPumpCurveCollection"})
+
+            # Creates pump curve elements
+            curve_dict = create_pump_curve_dict(model_object)
+            add_elem_from_dict(pumpCurveCollection_elem, curve_dict)
+
+            # Here we are trying to current impeller trim/vfd speeds from original GPI curve export csv
+            for trim in model_object.trims:
+                # Add Impeller Elements
+                impeller_elem = ET.SubElement(pumpCurveCollection_elem, 'Impeller')
+
+                # impeller_dict = create_impeller_dict(row['Curve number'])
+                impeller_dict = create_impeller_dict(trim)
+                add_elem_from_dict(impeller_elem, impeller_dict)
+
+                # Add Curve Elements
+                add_curve(impeller_elem, "Head", model_object, trim)
+                add_curve(impeller_elem, "Power", model_object, trim)
+                # add_curve(impeller_elem, "Efficiency", row['Curve number'])
+                add_curve(impeller_elem, "NPSH", model_object, trim)
+
+        tree = ET.ElementTree(root)
+        xml_name = f'{curve_family_name}.xml'
+        tree.write(xml_name)
+
+        return f"Created {xml_name}"
+    
     output.df_preview = df_preview
 
 app = App(app_ui, server)
