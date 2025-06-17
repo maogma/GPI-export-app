@@ -269,13 +269,13 @@ def server(input, output, session):
             fig, ax = plt.subplots(figsize=(8, 6))
 
             # Plot each speed independently
-            for speed, trim_df in selected_curve.trim_curves.items():
+            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
                 ax.plot(
                     trim_df['Q [m³/h]'],
                     trim_df['H [m]'],
                     marker='o',
                     linestyle='-',
-                    label=f"Speed: {speed} RPM"
+                    label=f"Speed: {int(speed)} RPM"
                 )
 
             # Plot the data (example: Q vs H)
@@ -313,13 +313,13 @@ def server(input, output, session):
             fig, ax = plt.subplots(figsize=(8, 6))
 
             # Plot each speed independently
-            for speed, trim_df in selected_curve.trim_curves.items():
+            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
                 ax.plot(
                     trim_df['Q [m³/h]'],
                     trim_df['P2 [kW]'],
                     marker='o',
                     linestyle='-',
-                    label=f"Speed: {speed} RPM"
+                    label=f"Speed: {int(speed)} RPM"
                 )
 
             # Plot the data (example: Q vs H)
@@ -354,13 +354,13 @@ def server(input, output, session):
             fig, ax = plt.subplots(figsize=(8, 6))
 
             # Plot each speed independently
-            for speed, trim_df in selected_curve.trim_curves.items():
+            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
                 ax.plot(
                     trim_df['Q [m³/h]'],
                     trim_df['NPSH [m]'],
                     marker='o',
                     linestyle='-',
-                    label=f"Speed: {speed} RPM"
+                    label=f"Speed: {int(speed)} RPM"
                 )
 
             # Plot the data (example: Q vs H)
