@@ -13,13 +13,12 @@ app_ui = ui.page_sidebar(
             choices=["Curve PSD","XML File"],
             selected=["Curve PSD"],
         ),
-        # ui.input_action_button("preview_btn", "Preview", class_="btn-primary"),
-        title="Inputs"
+        ui.input_action_button("create_psd", "Create PSD", class_="btn-primary"),
+        title="Inputs",
     ),
-    "ui.layout_columns()",
     ui.layout_columns(
         ui.card(
-            ui.card_header("Preview Pump Curves"),
+            ui.card_header("Preview Pump Curve Data"),
             ui.input_select("model_select", "Select a Model to preview:", {}),    
             ui.output_data_frame("df_preview"),
         ), 
@@ -62,15 +61,44 @@ def server(input, output, session):
     
 
     @reactive.calc
-    def update_select_choices():
+    def get_group_objects():
+        """
+        Get the selected curve based on the input from the dropdown.
+        This function is used to retrieve the Curve object for the selected ProductNumber.
+        """
         df = parsed_file()
         if df.empty:
-            return {}
+            print("No data available in the DataFrame.")
+            return None
         
         # Group by 'ProductNumber' and create group_objects
         grouped = df.groupby('ProductNumber')
-        group_objects = {partNumber: Curve(partNumber=partNumber, dataframe=group_df)
-                        for partNumber, group_df in grouped}
+        group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        for partNumber, group_df in grouped:
+            group_object = Curve(partNumber=partNumber, dataframe=group_df)
+            group_object.create_grouped_trim_curves()
+            group_objects[(f'{partNumber}')] = group_object
+
+        return group_objects  # Return the dictionary of Curve objects
+    
+
+    @reactive.calc
+    def update_select_choices():
+        # df = parsed_file()
+        # if df.empty:
+        #     return None
+        
+        # # Group by 'ProductNumber' and create group_objects
+        # grouped = df.groupby('ProductNumber')
+        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        # for partNumber, group_df in grouped:
+        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
+        #     group_object.create_grouped_trim_curves()
+        #     group_objects[(f'{partNumber}')] = group_object
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            return {}
 
         # Return the choices for the dropdown based on group_objects keys
         return {key: f"Partnumber {key}" for key in group_objects.keys()}
@@ -206,19 +234,23 @@ def server(input, output, session):
     @render.data_frame
     @reactive.event(input.model_select)
     def df_preview():
-        df = parsed_file()
-        if df.empty:
-            return pd.DataFrame()       
+        # df = parsed_file()
+        # if df.empty:
+        #     return None
         
-        # Make a model from each group
-        grouped = df.groupby('ProductNumber')         # Group by the pump model column
-        group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object 
+        # # Group by 'ProductNumber' and create group_objects
+        # grouped = df.groupby('ProductNumber')
+        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        # for partNumber, group_df in grouped:
+        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
+        #     group_object.create_grouped_trim_curves()
+        #     group_objects[(f'{partNumber}')] = group_object
 
-        for partNumber, group_df in grouped:
-            group_object = Curve(partNumber=partNumber, dataframe=group_df)
-            group_object.create_grouped_trim_curves()
-            group_objects[(f'{partNumber}')] = group_object
-
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:   
+            print("No group objects available.")
+            return {}
+        
         # Get the selected ProductNumber from the dropdown
         selected_product_number = input.model_select()
 
@@ -227,24 +259,32 @@ def server(input, output, session):
             selected_curve = group_objects[selected_product_number]
             return selected_curve.df  # Return the DataFrame of the selected Curve object
         else:
+            print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
             return pd.DataFrame()  # Return an empty DataFrame if the selection is invalid
 
     # Render the QH-plot based on the selected model
     @render.plot
     @reactive.event(input.model_select)
     def qh_preview():
-        # Get the parsed file
-        df = parsed_file()
-        if df.empty:
-            return None  # Return nothing if the DataFrame is empty
-
-        # Group by 'ProductNumber' and create group_objects
-        grouped = df.groupby('ProductNumber')
-        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
-                        for partNumber, group_df in grouped}
-
+        # df = parsed_file()
+        # if df.empty:
+        #     return None
+        
+        # # Group by 'ProductNumber' and create group_objects
+        # grouped = df.groupby('ProductNumber')
+        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        # for partNumber, group_df in grouped:
+        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
+        #     group_object.create_grouped_trim_curves()
+        #     group_objects[(f'{partNumber}')] = group_object
+        
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            return None
+        
         # Get the selected ProductNumber from the dropdown
-        selected_product_number = int(input.model_select())
+        selected_product_number = input.model_select()
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
@@ -268,18 +308,25 @@ def server(input, output, session):
     @render.plot
     @reactive.event(input.model_select)
     def qp2_preview():
-        # Get the parsed file
-        df = parsed_file()
-        if df.empty:
-            return None  # Return nothing if the DataFrame is empty
-
-        # Group by 'ProductNumber' and create group_objects
-        grouped = df.groupby('ProductNumber')
-        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
-                        for partNumber, group_df in grouped}
-
+        # df = parsed_file()
+        # if df.empty:
+        #     return None
+        
+        # # Group by 'ProductNumber' and create group_objects
+        # grouped = df.groupby('ProductNumber')
+        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        # for partNumber, group_df in grouped:
+        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
+        #     group_object.create_grouped_trim_curves()
+        #     group_objects[(f'{partNumber}')] = group_object
+        
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            return None
+        
         # Get the selected ProductNumber from the dropdown
-        selected_product_number = int(input.model_select())
+        selected_product_number = input.model_select()
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
@@ -303,18 +350,25 @@ def server(input, output, session):
     @render.plot
     @reactive.event(input.model_select)
     def qnpsh_preview():
-        # Get the parsed file
-        df = parsed_file()
-        if df.empty:
-            return None  # Return nothing if the DataFrame is empty
+        # df = parsed_file()
+        # if df.empty:
+        #     return None
+        
+        # # Group by 'ProductNumber' and create group_objects
+        # grouped = df.groupby('ProductNumber')
+        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
+        # for partNumber, group_df in grouped:
+        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
+        #     group_object.create_grouped_trim_curves()
+        #     group_objects[(f'{partNumber}')] = group_object
 
-        # Group by 'ProductNumber' and create group_objects
-        grouped = df.groupby('ProductNumber')
-        group_objects = {int(partNumber): Curve(partNumber=partNumber, dataframe=group_df)
-                        for partNumber, group_df in grouped}
-
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            return None
+        
         # Get the selected ProductNumber from the dropdown
-        selected_product_number = int(input.model_select())
+        selected_product_number = input.model_select()
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
