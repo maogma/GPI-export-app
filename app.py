@@ -8,12 +8,13 @@ app_ui = ui.page_sidebar(
         ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
         ui.input_file("input_file", "Choose CSV File", accept=[".csv"], multiple=False),
         ui.input_checkbox_group(
-            "file_outputs",
-            "Desired File Outputs",
-            choices=["Curve PSD","XML File"],
-            selected=["Curve PSD"],
+            "speed_correct",
+            "Speed Correct Data?",
+            choices=["Curve PSD"],
+            selected=[],
         ),
         ui.input_action_button("create_psd", "Create PSD", class_="btn-primary"),
+        ui.input_action_button("create_xml", "Create XML", class_="btn-primary"),
         title="Inputs",
     ),
     ui.layout_columns(
@@ -84,17 +85,6 @@ def server(input, output, session):
 
     @reactive.calc
     def update_select_choices():
-        # df = parsed_file()
-        # if df.empty:
-        #     return None
-        
-        # # Group by 'ProductNumber' and create group_objects
-        # grouped = df.groupby('ProductNumber')
-        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
-        # for partNumber, group_df in grouped:
-        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
-        #     group_object.create_grouped_trim_curves()
-        #     group_objects[(f'{partNumber}')] = group_object
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
             print("No group objects available.")
@@ -234,18 +224,6 @@ def server(input, output, session):
     @render.data_frame
     @reactive.event(input.model_select)
     def df_preview():
-        # df = parsed_file()
-        # if df.empty:
-        #     return None
-        
-        # # Group by 'ProductNumber' and create group_objects
-        # grouped = df.groupby('ProductNumber')
-        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
-        # for partNumber, group_df in grouped:
-        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
-        #     group_object.create_grouped_trim_curves()
-        #     group_objects[(f'{partNumber}')] = group_object
-
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:   
             print("No group objects available.")
@@ -265,19 +243,7 @@ def server(input, output, session):
     # Render the QH-plot based on the selected model
     @render.plot
     @reactive.event(input.model_select)
-    def qh_preview():
-        # df = parsed_file()
-        # if df.empty:
-        #     return None
-        
-        # # Group by 'ProductNumber' and create group_objects
-        # grouped = df.groupby('ProductNumber')
-        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
-        # for partNumber, group_df in grouped:
-        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
-        #     group_object.create_grouped_trim_curves()
-        #     group_objects[(f'{partNumber}')] = group_object
-        
+    def qh_preview():        
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
             print("No group objects available.")
@@ -308,17 +274,6 @@ def server(input, output, session):
     @render.plot
     @reactive.event(input.model_select)
     def qp2_preview():
-        # df = parsed_file()
-        # if df.empty:
-        #     return None
-        
-        # # Group by 'ProductNumber' and create group_objects
-        # grouped = df.groupby('ProductNumber')
-        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
-        # for partNumber, group_df in grouped:
-        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
-        #     group_object.create_grouped_trim_curves()
-        #     group_objects[(f'{partNumber}')] = group_object
         
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
@@ -350,18 +305,6 @@ def server(input, output, session):
     @render.plot
     @reactive.event(input.model_select)
     def qnpsh_preview():
-        # df = parsed_file()
-        # if df.empty:
-        #     return None
-        
-        # # Group by 'ProductNumber' and create group_objects
-        # grouped = df.groupby('ProductNumber')
-        # group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
-        # for partNumber, group_df in grouped:
-        #     group_object = Curve(partNumber=partNumber, dataframe=group_df)
-        #     group_object.create_grouped_trim_curves()
-        #     group_objects[(f'{partNumber}')] = group_object
-
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
             print("No group objects available.")
@@ -386,6 +329,13 @@ def server(input, output, session):
         else:
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
             return None  # Return nothing if the selection is invalid
+
+
+    @reactive.event(input.create_psd)
+    def create_psd():
+        pass
+
+
 
 
     output.df_preview = df_preview
