@@ -5,15 +5,15 @@ from shiny import App, reactive, render, ui
 # Add page title and sidebar
 app_ui = ui.page_sidebar(  
     ui.sidebar(
-        ui.input_text("text", "Pump Family", "i.e. SPE, NB, Alpha..."),  
+        ui.input_text("pump_family", "Pump Family", "SPE"),  
         ui.input_file("input_file", "Choose CSV File", accept=[".csv"], multiple=False),
         ui.input_checkbox_group(
             "speed_correct",
             "Speed Correct Data?",
-            choices=["Curve PSD"],
-            selected=[],
+            choices=["Yes", "No"],
+            selected=["Yes"],
         ),
-        ui.input_action_button("create_psd", "Create PSD", class_="btn-primary"),
+        ui.input_action_button("create_psd_file", "Create PSD", class_="btn-primary"),
         ui.input_action_button("create_xml", "Create XML", class_="btn-primary"),
         title="Inputs",
     ),
@@ -35,10 +35,16 @@ app_ui = ui.page_sidebar(
 
 # Define the server logic
 def server(input, output, session):
+    @reactive.event(input.create_psd_file)
+    def create_psd():
+        print("Clicked PSD button")
+    
+
     @reactive.calc
     def parsed_file():
         file = input.input_file() # This is a list of files, we only want the first one
         if file is None:
+            print("No input file selected.")
             return pd.DataFrame()
         
         # Access the file path from the first uploaded file
@@ -97,7 +103,7 @@ def server(input, output, session):
     # Bind the dropdown choices to the output of update_select_choices
     @reactive.effect
     def update_dropdown():
-        choices = update_select_choices()  # Get the updated choices
+        # choices = update_select_choices()  # Get the updated choices
         ui.update_select("model_select", choices=update_select_choices())  # Update the dropdown
 
 
@@ -330,12 +336,34 @@ def server(input, output, session):
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
             return None  # Return nothing if the selection is invalid
 
-
-    @reactive.event(input.create_psd)
-    def create_psd():
+    @reactive.calc
+    def speed_correct():
         pass
 
+    # @reactive.event(input.create_xml_file)
+    # def create_psd():
+    #     print("Clicked PSD button")
+        # import shutil
+        # from openpyxl import load_workbook
+        # import os
 
+        # # This points to the curve PSD template to be used
+        # template = r'C:\Users\104092\OneDrive - Grundfos\Documents\1 - PROJECTS\GPI-export-app\SKB Blank Curve PSD - Power_Metric.xlsx'
+        # if not os.path.exists(template):
+        #     print(f"Template file not found at: {template}")
+        #     return
+
+        # # Create a local working copy to leave template unmodified
+        # product = input.pump_family()  # Get the pump family from the input
+        # if not product:
+        #     print("Pump family input is empty or invalid.")
+        #     return
+        
+        # output_psd_file = product + ' - Curve PSD.xlsx'
+        # workingCopy = shutil.copyfile(template, output_psd_file)
+        # wb = load_workbook(workingCopy)      
+
+        # print(f"Creating PSD for {product}...")
 
 
     output.df_preview = df_preview
