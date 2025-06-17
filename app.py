@@ -14,7 +14,8 @@ app_ui = ui.page_sidebar(
             selected=["Yes"],
         ),
         ui.input_action_button("create_psd_file", "Create PSD", class_="btn-primary"),
-        ui.input_action_button("create_xml", "Create XML", class_="btn-primary"),
+        ui.output_text("psd_confirmation"),
+        ui.input_action_button("create_xml", "Create XML"),
         title="Inputs",
     ),
     ui.layout_columns(
@@ -35,11 +36,6 @@ app_ui = ui.page_sidebar(
 
 # Define the server logic
 def server(input, output, session):
-    @reactive.event(input.create_psd_file)
-    def create_psd():
-        print("Clicked PSD button")
-    
-
     @reactive.calc
     def parsed_file():
         file = input.input_file() # This is a list of files, we only want the first one
@@ -340,31 +336,10 @@ def server(input, output, session):
     def speed_correct():
         pass
 
-    # @reactive.event(input.create_xml_file)
-    # def create_psd():
-    #     print("Clicked PSD button")
-        # import shutil
-        # from openpyxl import load_workbook
-        # import os
-
-        # # This points to the curve PSD template to be used
-        # template = r'C:\Users\104092\OneDrive - Grundfos\Documents\1 - PROJECTS\GPI-export-app\SKB Blank Curve PSD - Power_Metric.xlsx'
-        # if not os.path.exists(template):
-        #     print(f"Template file not found at: {template}")
-        #     return
-
-        # # Create a local working copy to leave template unmodified
-        # product = input.pump_family()  # Get the pump family from the input
-        # if not product:
-        #     print("Pump family input is empty or invalid.")
-        #     return
-        
-        # output_psd_file = product + ' - Curve PSD.xlsx'
-        # workingCopy = shutil.copyfile(template, output_psd_file)
-        # wb = load_workbook(workingCopy)      
-
-        # print(f"Creating PSD for {product}...")
-
+    @render.text
+    @reactive.event(input.create_psd_file)
+    def psd_confirmation():
+        return "PSD file created successfully!"
 
     output.df_preview = df_preview
 
