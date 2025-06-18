@@ -120,8 +120,22 @@ def server(input, output, session):
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
-            speeds = {str(speed): f"{speed} RPM" for speed in selected_curve.trims}
-            speeds["All"] = "All Trims"  # Add the "All" option
+
+            # Determine whether to use 'RPM' or 'mm' terminology
+            if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
+                terminology = "RPM"
+                trims = selected_curve.df['RPM(Curve nominal)'].unique()
+            elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
+                terminology = "mm"
+                trims = selected_curve.df['Impeller(Curve)'].unique()
+            else:
+                print("Neither RPM nor Impeller is changing.")
+                ui.update_select("speed_select", choices={})  # Clear the speed dropdown
+                return
+
+            # Update the dropdown with the appropriate terminology
+            speeds = {str(trim): f"{trim} {terminology}" for trim in trims}
+            speeds["All"] = f"All {terminology}"  # Add the "All" option
             ui.update_select("speed_select", choices=speeds)  # Update the speed dropdown
         else:
             ui.update_select("speed_select", choices={})  # Clear the speed dropdown if no product is selected
@@ -290,34 +304,46 @@ def server(input, output, session):
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
 
+            # Determine whether to use 'RPM' or 'mm' terminology
+            if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
+                terminology = "RPM"
+                trims = selected_curve.df['RPM(Curve nominal)'].unique()
+            elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
+                terminology = "mm"
+                trims = selected_curve.df['Impeller(Curve)'].unique()
+            else:
+                print("Neither RPM nor Impeller is changing.")
+                return None
+
+
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
 
             if selected_speed == "All":
                 # Plot all trims
-                for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
+                for trim in trims:
+                    trim_df = selected_curve.df[selected_curve.df[f'{terminology}(Curve nominal)'] == trim]
                     ax.plot(
                         trim_df['Q [m³/h]'],
                         trim_df['H [m]'],
                         marker='o',
                         linestyle='-',
-                        label=f"Speed: {int(speed)} RPM"
+                        label=f"{terminology}: {int(trim)} {terminology}"
                     )
             elif selected_speed:
                 # Plot only the selected trim
                 try:
-                    speed = int(float(selected_speed))
-                    if speed in selected_curve.trim_curves:
-                        trim_df = selected_curve.trim_curves[speed]
-                        ax.plot(
-                            trim_df['Q [m³/h]'],
-                            trim_df['H [m]'],
-                            marker='o',
-                            linestyle='-',
-                            label=f"Speed: {speed} RPM"
-                        )
+                    trim = float(selected_speed)
+                    trim_df = selected_curve.df[selected_curve.df[f'{terminology}(Curve nominal)'] == trim]
+                    ax.plot(
+                        trim_df['Q [m³/h]'],
+                        trim_df['H [m]'],
+                        marker='o',
+                        linestyle='-',
+                        label=f"{terminology}: {int(trim)} {terminology}"
+                    )
                 except ValueError:
-                    print(f"Invalid speed value: {selected_speed}")
+                    print(f"Invalid trim value: {selected_speed}")
 
             # Plot the data (example: Q vs H)
             ax.set_title(f"Q vs. H for ProductNumber {input.model_select()}")
