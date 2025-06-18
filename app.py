@@ -32,7 +32,7 @@ app_ui = ui.page_sidebar(
             ui.output_plot("qp2_preview"),  
             ui.output_plot("qnpsh_preview"),  
         ),
-        col_widths=(4, 8)
+        col_widths=(6, 6) # Two columns for the plots (12 max width)
     ),
 )   
 
@@ -375,10 +375,6 @@ def server(input, output, session):
             print(f"Selected ProductNumber '{selected_product_number}' not found in group_objects.")
             return None  # Return nothing if the selection is invalid
 
-    @reactive.calc
-    def speed_correct():
-        pass
-
 
     @reactive.calc
     def add_speed_data():
@@ -407,6 +403,9 @@ def server(input, output, session):
         for object_name in group_objects:
             curve_pn = group_objects[object_name].pn
             wb.copy_worksheet(wb['NEW']).title = curve_pn # Creates and renames blank PSD Tab as template for each new curve tab
+
+        # Apply speed correction if enabled
+        group_objects = apply_speed_correction(group_objects, "Yes" in input.speed_correct())
 
         # Fill PSD 
         for object_name in group_objects:
@@ -466,6 +465,9 @@ def server(input, output, session):
         import xml.etree.ElementTree as ET
 
         group_objects = get_group_objects()
+
+        # Apply speed correction if enabled
+        group_objects = apply_speed_correction(group_objects, "Yes" in input.speed_correct())
 
         # Get the selected ProductNumber from the dropdown
         selected_product_number = input.model_select()
@@ -753,7 +755,26 @@ def server(input, output, session):
         tree.write(xml_name)
 
         return f"Created {xml_name}"
-    
+
+
+    def apply_speed_correction(group_objects, speed_correct_enabled):
+        """
+        Applies speed correction to all Curve objects in group_objects if enabled.
+
+        Args:
+            group_objects (dict): Dictionary of Curve objects.
+            speed_correct_enabled (bool): Whether speed correction is enabled.
+        """
+        if speed_correct_enabled:
+            print("Speed correction enabled. Applying speed correction...")
+            for object_name, model_object in group_objects.items():
+                model_object.speed_correct_data()
+                print(f"Speed correction applied to {object_name}.")
+        else:
+            print("Speed correction not enabled. Proceeding without speed correction.")
+
+        return group_objects  # Return the updated group_objects
+
     output.df_preview = df_preview
 
 app = App(app_ui, server)
