@@ -23,11 +23,12 @@ app_ui = ui.page_sidebar(
     ui.layout_columns(
         ui.card(
             ui.card_header("Preview Pump Curve Data"),
-            ui.input_select("model_select", "Select a Model to preview:", {}),    
+            ui.input_select("model_select", "Select a Model to preview:", {}),   
             ui.output_data_frame("df_preview"),
         ), 
         ui.card(
             ui.card_header("Curve Data Preview"),
+            ui.input_select("speed_select", "Select Speed/Trim:", {}), 
             ui.output_plot("qh_preview"),  
             ui.output_plot("qp2_preview"),  
             ui.output_plot("qnpsh_preview"),  
@@ -103,6 +104,27 @@ def server(input, output, session):
     def update_dropdown():
         # choices = update_select_choices()  # Get the updated choices
         ui.update_select("model_select", choices=update_select_choices())  # Update the dropdown
+
+
+    @reactive.effect
+    def update_speed_dropdown():
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            ui.update_select("speed_select", choices={})  # Clear the speed dropdown
+            return
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = input.model_select()
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+            speeds = {str(speed): f"{speed} RPM" for speed in selected_curve.trims}
+            speeds["All"] = "All Trims"  # Add the "All" option
+            ui.update_select("speed_select", choices=speeds)  # Update the speed dropdown
+        else:
+            ui.update_select("speed_select", choices={})  # Clear the speed dropdown if no product is selected
 
 
     # Create class to hold each curve by product number/trim
@@ -251,15 +273,18 @@ def server(input, output, session):
 
     # Render the QH-plot based on the selected model
     @render.plot
-    @reactive.event(input.model_select)
+    @reactive.event(input.model_select, input.speed_select)
     def qh_preview():        
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
             print("No group objects available.")
             return None
         
-        # Get the selected ProductNumber from the dropdown
+        # Get the selected ProductNumber and Speed from the dropdowns
         selected_product_number = input.model_select()
+        selected_speed = input.speed_select()
+
+        print(f"Selected ProductNumber: {selected_product_number}, Selected Speed: {selected_speed}")  # Debug print
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
@@ -268,15 +293,31 @@ def server(input, output, session):
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Plot each speed independently
-            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
-                ax.plot(
-                    trim_df['Q [m³/h]'],
-                    trim_df['H [m]'],
-                    marker='o',
-                    linestyle='-',
-                    label=f"Speed: {int(speed)} RPM"
-                )
+            if selected_speed == "All":
+                # Plot all trims
+                for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
+                    ax.plot(
+                        trim_df['Q [m³/h]'],
+                        trim_df['H [m]'],
+                        marker='o',
+                        linestyle='-',
+                        label=f"Speed: {int(speed)} RPM"
+                    )
+            elif selected_speed:
+                # Plot only the selected trim
+                try:
+                    speed = int(float(selected_speed))
+                    if speed in selected_curve.trim_curves:
+                        trim_df = selected_curve.trim_curves[speed]
+                        ax.plot(
+                            trim_df['Q [m³/h]'],
+                            trim_df['H [m]'],
+                            marker='o',
+                            linestyle='-',
+                            label=f"Speed: {speed} RPM"
+                        )
+                except ValueError:
+                    print(f"Invalid speed value: {selected_speed}")
 
             # Plot the data (example: Q vs H)
             ax.set_title(f"Q vs. H for ProductNumber {input.model_select()}")
@@ -293,7 +334,7 @@ def server(input, output, session):
 
     # Render the QP2-plot based on the selected model
     @render.plot
-    @reactive.event(input.model_select)
+    @reactive.event(input.model_select, input.speed_select)
     def qp2_preview():
         
         group_objects = get_group_objects()  # Get the group_objects dictionary
@@ -301,26 +342,42 @@ def server(input, output, session):
             print("No group objects available.")
             return None
         
-        # Get the selected ProductNumber from the dropdown
+        # Get the selected ProductNumber and Speed from the dropdowns
         selected_product_number = input.model_select()
+        selected_speed = input.speed_select()
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
-            # df_selected = selected_curve.df  # Get the DataFrame of the selected Curve object
 
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Plot each speed independently
-            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
-                ax.plot(
-                    trim_df['Q [m³/h]'],
-                    trim_df['P2 [kW]'],
-                    marker='o',
-                    linestyle='-',
-                    label=f"Speed: {int(speed)} RPM"
-                )
+            if selected_speed == "All":
+                # Plot all trims
+                for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
+                    ax.plot(
+                        trim_df['Q [m³/h]'],
+                        trim_df['P2 [kW]'],
+                        marker='o',
+                        linestyle='-',
+                        label=f"Speed: {int(speed)} RPM"
+                    )
+            elif selected_speed:
+                # Plot only the selected trim
+                try:
+                    speed = int(float(selected_speed))
+                    if speed in selected_curve.trim_curves:
+                        trim_df = selected_curve.trim_curves[speed]
+                        ax.plot(
+                            trim_df['Q [m³/h]'],
+                            trim_df['P2 [kW]'],
+                            marker='o',
+                            linestyle='-',
+                            label=f"Speed: {speed} RPM"
+                        )
+                except ValueError:
+                    print(f"Invalid speed value: {selected_speed}")
 
             # Plot the data (example: Q vs H)
             ax.set_title(f"Q vs. P2 for ProductNumber {input.model_select()}")
@@ -336,15 +393,16 @@ def server(input, output, session):
 
     # Render the QNPSH-plot based on the selected model
     @render.plot
-    @reactive.event(input.model_select)
+    @reactive.event(input.model_select, input.speed_select)
     def qnpsh_preview():
         group_objects = get_group_objects()  # Get the group_objects dictionary
         if group_objects is None:
             print("No group objects available.")
             return None
         
-        # Get the selected ProductNumber from the dropdown
+        # Get the selected ProductNumber and Speed from the dropdowns
         selected_product_number = input.model_select()
+        selected_speed = input.speed_select()
 
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
@@ -353,15 +411,31 @@ def server(input, output, session):
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Plot each speed independently
-            for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
-                ax.plot(
-                    trim_df['Q [m³/h]'],
-                    trim_df['NPSH [m]'],
-                    marker='o',
-                    linestyle='-',
-                    label=f"Speed: {int(speed)} RPM"
-                )
+            if selected_speed == "All":
+                # Plot all trims
+                for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
+                    ax.plot(
+                        trim_df['Q [m³/h]'],
+                        trim_df['NPSH [m]'],
+                        marker='o',
+                        linestyle='-',
+                        label=f"Speed: {int(speed)} RPM"
+                    )
+            elif selected_speed:
+                # Plot only the selected trim
+                try:
+                    speed = int(float(selected_speed))
+                    if speed in selected_curve.trim_curves:
+                        trim_df = selected_curve.trim_curves[speed]
+                        ax.plot(
+                            trim_df['Q [m³/h]'],
+                            trim_df['NPSH [m]'],
+                            marker='o',
+                            linestyle='-',
+                            label=f"Speed: {speed} RPM"
+                        )
+                except ValueError:
+                    print(f"Invalid speed value: {selected_speed}")
 
             # Plot the data (example: Q vs H)
             ax.set_title(f"Q vs. NPSH for ProductNumber {input.model_select()}")
