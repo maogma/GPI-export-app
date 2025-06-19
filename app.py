@@ -141,6 +141,30 @@ def server(input, output, session):
             ui.update_select("speed_select", choices={})  # Clear the speed dropdown if no product is selected
 
 
+    def determine_terminology_and_trims(selected_curve):
+        """
+        Determines whether the product is trimmable (Impeller) or VFD (RPM) and returns the terminology and trims.
+
+        Args:
+            selected_curve: The Curve object for the selected product.
+
+        Returns:
+            tuple: A tuple containing the terminology (str) and trims (list).
+        """
+        if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
+            terminology = "RPM"
+            trims = selected_curve.df['RPM(Curve nominal)'].unique()
+        elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
+            terminology = "mm"
+            trims = selected_curve.df['Impeller(Curve)'].unique()
+        else:
+            print("Neither RPM nor Impeller is changing.")
+            return None, None  # Return None if neither is changing
+
+        return terminology, trims
+
+
+
     # Create class to hold each curve by product number/trim
     class Curve:
         # def __init__(self, pumpModel: str, dataframe):
@@ -305,16 +329,10 @@ def server(input, output, session):
             selected_curve = group_objects[selected_product_number]
 
             # Determine whether to use 'RPM' or 'mm' terminology
-            if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
-                terminology = "RPM"
-                trims = selected_curve.df['RPM(Curve nominal)'].unique()
-            elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
-                terminology = "mm"
-                trims = selected_curve.df['Impeller(Curve)'].unique()
-            else:
-                print("Neither RPM nor Impeller is changing.")
-                return None
-
+            terminology, trims = determine_terminology_and_trims(selected_curve)
+            if terminology is None or trims is None:
+                ui.update_select("speed_select", choices={})  # Clear the speed dropdown
+                return
 
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -376,6 +394,11 @@ def server(input, output, session):
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
 
+            # Use the helper function to determine terminology and trims
+            terminology, trims = determine_terminology_and_trims(selected_curve)
+            if terminology is None or trims is None:
+                return None
+
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -433,6 +456,11 @@ def server(input, output, session):
         # Check if the selected ProductNumber exists in group_objects
         if selected_product_number in group_objects:
             selected_curve = group_objects[selected_product_number]
+
+            # Use the helper function to determine terminology and trims
+            terminology, trims = determine_terminology_and_trims(selected_curve)
+            if terminology is None or trims is None:
+                return None
 
             # Create the plot
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -805,13 +833,25 @@ def server(input, output, session):
             'skbVersion': "24.3.0.240819.2070"
         })
 
+        # Use the helper function to determine terminology and trims
+        terminology, _ = determine_terminology_and_trims(next(iter(group_objects.values())))
+
+        # Set svDataType and interpDataType based on terminology
+        if terminology == "RPM":
+            sv_data_type = "speed"
+            interp_data_type = "speed"
+        elif terminology == "mm":
+            sv_data_type = "impellerDiamter"
+            interp_data_type = "impellerDiamter"
+        else:
+            sv_data_type = "unknown"
+            interp_data_type = "unknown"
+
         header_dict = {
                 'name': curve_family_name,
                 'impellerType':'radialFlow',
-                # 'svDataType':'impellerDiamter',
-                # 'interpDataType':'impellerDiamter',
-                'svDataType':'speed',
-                'interpDataType':'speed',
+                'svDataType':sv_data_type,
+                'interpDataType':interp_data_type,
                 'compressorConditionsInputTypeSkb':'speedOfSound',
                 'flowTypeSkb':'volumetricFlow',
                 'headTypeSkb':'head',
