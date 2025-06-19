@@ -122,17 +122,8 @@ def server(input, output, session):
             selected_curve = group_objects[selected_product_number]
 
             # Determine whether to use 'RPM' or 'mm' terminology
-            if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
-                terminology = "RPM"
-                trims = selected_curve.df['RPM(Curve nominal)'].unique()
-            elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
-                terminology = "mm"
-                trims = selected_curve.df['Impeller(Curve)'].unique()
-            else:
-                print("Neither RPM nor Impeller is changing.")
-                ui.update_select("speed_select", choices={})  # Clear the speed dropdown
-                return
-
+            terminology, trims = determine_terminology_and_trims(selected_curve)
+            
             # Update the dropdown with the appropriate terminology
             speeds = {str(trim): f"{trim} {terminology}" for trim in trims}
             speeds["All"] = f"All {terminology}"  # Add the "All" option
