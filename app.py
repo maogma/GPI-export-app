@@ -136,7 +136,7 @@ def server(input, output, session):
             # Update the dropdown with the appropriate terminology
             speeds = {str(trim): f"{trim} {terminology}" for trim in trims}
             speeds["All"] = f"All {terminology}"  # Add the "All" option
-            ui.update_select("speed_select", choices=speeds)  # Update the speed dropdown
+            ui.update_select("speed_select", choices=speeds, selected="All")  # Update the speed dropdown
         else:
             ui.update_select("speed_select", choices={})  # Clear the speed dropdown if no product is selected
 
