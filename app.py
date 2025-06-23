@@ -1,11 +1,32 @@
 import pandas as pd
+import os
 import matplotlib.pyplot as plt
 from shiny import App, reactive, render, ui
+
+RPM_COLUMN = "RPM(Curve nominal)"
+IMPELLER_COLUMN = "Impeller(Curve)"
+PRODUCT_NUMBER_COLUMN = "ProductNumber"
+PRODUCT_NAME_COLUMN = "Product name"
+RPM_PUMP_DATA_COLUMN = "RPM(Pump data)"
+Q_COLUMN = "Q [m³/h]"
+H_COLUMN = "H [m]"
+P2_COLUMN = "P2 [kW]"
+NPSH_COLUMN = "NPSH [m]"
+RPM_REAL_COLUMN = "RPM(real)"
+
+XML_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance"
+SELECTOR_VERSION = "8.0.0"
+SKB_VERSION = "24.3.0.240819.2070"
+
+# Define the path to the template file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get the directory of the current file
+TEMPLATE_FILE = "SKB Blank Curve PSD - Power_Metric.xlsx"
+TEMPLATE_PATH = os.path.join(BASE_DIR, TEMPLATE_FILE)
 
 # Add page title and sidebar
 app_ui = ui.page_sidebar(  
     ui.sidebar(
-        ui.input_text("pump_family", "Pump Family", "SPE"),  
+        ui.input_text("pump_family", "Pump Family"),  
         ui.input_file("input_file", "Choose CSV File", accept=[".csv"], multiple=False),
         ui.input_checkbox_group(
             "speed_correct",
@@ -57,11 +78,11 @@ def server(input, output, session):
         df.dropna(how='all', inplace=True)
 
         # Forward fill productname and curve nominal columns for grouping 
-        df['ProductNumber'] = df['ProductNumber'].ffill()
-        df['ProductNumber'] = pd.to_numeric(df['ProductNumber'], errors='coerce').astype(int)     # Cast ProductNumber column to integer
-        df['Product name'] = df['Product name'].ffill()
-        df['RPM(Curve nominal)'] = df['RPM(Curve nominal)'].ffill()
-        df['RPM(Pump data)'] = df['RPM(Pump data)'].ffill()
+        df[PRODUCT_NUMBER_COLUMN] = df[PRODUCT_NUMBER_COLUMN].ffill()
+        df[PRODUCT_NUMBER_COLUMN] = pd.to_numeric(df[PRODUCT_NUMBER_COLUMN], errors='coerce').astype(int)     # Cast ProductNumber column to integer
+        df[PRODUCT_NAME_COLUMN] = df[PRODUCT_NAME_COLUMN].ffill()
+        df[RPM_COLUMN] = df[RPM_COLUMN].ffill()
+        df[RPM_PUMP_DATA_COLUMN] = df[RPM_PUMP_DATA_COLUMN].ffill()
 
         return df
     
@@ -78,7 +99,7 @@ def server(input, output, session):
             return None
         
         # Group by 'ProductNumber' and create group_objects
-        grouped = df.groupby('ProductNumber')
+        grouped = df.groupby(PRODUCT_NUMBER_COLUMN)
         group_objects = {}   # group_objects (dict) where each key = partnumber, value = Curve Object
         for partNumber, group_df in grouped:
             group_object = Curve(partNumber=partNumber, dataframe=group_df)
@@ -102,7 +123,6 @@ def server(input, output, session):
     # Bind the dropdown choices to the output of update_select_choices
     @reactive.effect
     def update_dropdown():
-        # choices = update_select_choices()  # Get the updated choices
         ui.update_select("model_select", choices=update_select_choices())  # Update the dropdown
 
 
@@ -142,12 +162,12 @@ def server(input, output, session):
         Returns:
             tuple: A tuple containing the terminology (str) and trims (list).
         """
-        if len(selected_curve.df['RPM(Curve nominal)'].unique()) > 1:  # If RPM is changing
+        if len(selected_curve.df[RPM_COLUMN].unique()) > 1:  # If RPM is changing
             terminology = "RPM"
-            trims = selected_curve.df['RPM(Curve nominal)'].unique()
-        elif 'Impeller(Curve)' in selected_curve.df.columns and len(selected_curve.df['Impeller(Curve)'].unique()) > 1:  # If Impeller is changing
+            trims = selected_curve.df[RPM_COLUMN].unique()
+        elif IMPELLER_COLUMN in selected_curve.df.columns and len(selected_curve.df[IMPELLER_COLUMN].unique()) > 1:  # If Impeller is changing
             terminology = "mm"
-            trims = selected_curve.df['Impeller(Curve)'].unique()
+            trims = selected_curve.df[IMPELLER_COLUMN].unique()
         else:
             print("Neither RPM nor Impeller is changing.")
             return None, None  # Return None if neither is changing
@@ -163,11 +183,11 @@ def server(input, output, session):
             # self.name = pumpModel
             self.name = partNumber
             self.df = dataframe
-            self.model = dataframe.iloc[0]['Product name']
-            self.pn = str(int(dataframe.iloc[0]['ProductNumber']))
+            self.model = dataframe.iloc[0][PRODUCT_NAME_COLUMN]
+            self.pn = str(int(dataframe.iloc[0][PRODUCT_NUMBER_COLUMN]))
             self.frequency = dataframe.iloc[0]['Frequency']
             self.phase = dataframe.iloc[0]['Phase']
-            self.trims = self.df['RPM(Curve nominal)'].unique().tolist()
+            self.trims = self.df[RPM_COLUMN].unique().tolist()
             self.trim_curves = {} 
 
 
@@ -177,28 +197,28 @@ def server(input, output, session):
 
         def create_grouped_trim_curves(self):
             '''Group entire curve df by the trim/speed column'''
-            grouped = self.df.groupby('RPM(Curve nominal)')
+            grouped = self.df.groupby(RPM_COLUMN)
             
             # Check if there are multiple speeds
             if len(grouped) > 1:
                 print(f"Multiple speeds found for part number {self.pn}: {list(grouped.groups.keys())}")
 
             for group_trim, trim_df in grouped:
-                self.trim_curves[group_trim] = trim_df[['Q [m³/h]','H [m]','P2 [kW]','NPSH [m]','RPM(Pump data)','RPM(Curve nominal)','RPM(real)']]
+                self.trim_curves[group_trim] = trim_df[[Q_COLUMN, H_COLUMN, P2_COLUMN, NPSH_COLUMN, RPM_PUMP_DATA_COLUMN, RPM_COLUMN, RPM_REAL_COLUMN]]
 
 
         def _apply_affinity_laws(self, row, n2, n1):
             # Affinity Laws function
             N1, N2 = n1, n2
-            Q2 = row['Q [m³/h]'] * (N2 / N1)
-            H2 = row['H [m]'] * (N2 / N1)**2
-            NPSH2 = row['NPSH [m]'] * (N2 / N1)**2
-            P22 = row['P2 [kW]'] * (N2 / N1)**3
-            rpm_pump_data = row['RPM(Pump data)']
-            rpm_curve_nom = row['RPM(Curve nominal)']
-            rpm_curve_real = row['RPM(real)']
+            Q2 = row[Q_COLUMN] * (N2 / N1)
+            H2 = row[H_COLUMN] * (N2 / N1)**2
+            NPSH2 = row[NPSH_COLUMN] * (N2 / N1)**2
+            P22 = row[P2_COLUMN] * (N2 / N1)**3
+            rpm_pump_data = row[RPM_PUMP_DATA_COLUMN]
+            rpm_curve_nom = row[RPM_COLUMN]
+            rpm_curve_real = row[RPM_REAL_COLUMN]
             return pd.Series([Q2, H2, P22, NPSH2, rpm_pump_data, rpm_curve_nom, rpm_curve_real], 
-                            index=['Q [m³/h]', 'H [m]', 'P2 [kW]', 'NPSH [m]', 'RPM(Pump data)', 'RPM(Curve nominal)', 'RPM(real)'])
+                            index=[Q_COLUMN, H_COLUMN, P2_COLUMN, NPSH_COLUMN, RPM_PUMP_DATA_COLUMN, RPM_COLUMN, RPM_REAL_COLUMN])
 
 
         def create_new_trim_df(self, n2):
@@ -238,26 +258,26 @@ def server(input, output, session):
             N1 is taken from 'RPM(real)' and N2 is taken from 'RPM (Curve nominal)'.
             """
             # Ensure required columns exist
-            required_columns = ['RPM(real)', 'RPM(Curve nominal)', 'Q [m³/h]', 'H [m]', 'P2 [kW]', 'NPSH [m]']
+            required_columns = [RPM_REAL_COLUMN, RPM_COLUMN, Q_COLUMN, H_COLUMN, P2_COLUMN, NPSH_COLUMN]
             for col in required_columns:
                 if col not in self.df.columns:
                     raise KeyError(f"Required column '{col}' is missing in the DataFrame.")
 
             # Apply affinity laws row by row
             def apply_affinity_laws(row):
-                n1 = row['RPM(real)']
-                n2 = row['RPM(Curve nominal)']
+                n1 = row[RPM_REAL_COLUMN]
+                n2 = row[RPM_COLUMN]
                 if n1 == 0 or n2 == 0:  # Avoid division by zero
                     return row  # Return the original row if N1 or N2 is zero
 
                 # print(f'Applying affinity laws for N1: {n1}, N2: {n2}')
 
                 # Apply affinity laws
-                row['Q [m³/h]'] = row['Q [m³/h]'] * (n2 / n1)
-                row['H [m]'] = row['H [m]'] * (n2 / n1) ** 2
-                row['P2 [kW]'] = row['P2 [kW]'] * (n2 / n1) ** 3
-                row['NPSH [m]'] = row['NPSH [m]'] * (n2 / n1) ** 2
-                row['RPM(real)'] = n2
+                row[Q_COLUMN] = row[Q_COLUMN] * (n2 / n1)
+                row[H_COLUMN] = row[H_COLUMN] * (n2 / n1) ** 2
+                row[P2_COLUMN] = row[P2_COLUMN] * (n2 / n1) ** 3
+                row[NPSH_COLUMN] = row[NPSH_COLUMN] * (n2 / n1) ** 2
+                row[RPM_REAL_COLUMN] = n2
                 return row
 
             # Update the DataFrame in place
@@ -333,8 +353,8 @@ def server(input, output, session):
                 for trim in trims:
                     trim_df = selected_curve.df[selected_curve.df[f'{terminology}(Curve nominal)'] == trim]
                     ax.plot(
-                        trim_df['Q [m³/h]'],
-                        trim_df['H [m]'],
+                        trim_df[Q_COLUMN],
+                        trim_df[H_COLUMN],
                         marker='o',
                         linestyle='-',
                         label=f"{terminology}: {int(trim)} {terminology}"
@@ -345,8 +365,8 @@ def server(input, output, session):
                     trim = float(selected_speed)
                     trim_df = selected_curve.df[selected_curve.df[f'{terminology}(Curve nominal)'] == trim]
                     ax.plot(
-                        trim_df['Q [m³/h]'],
-                        trim_df['H [m]'],
+                        trim_df[Q_COLUMN],
+                        trim_df[H_COLUMN],
                         marker='o',
                         linestyle='-',
                         label=f"{terminology}: {int(trim)} {terminology}"
@@ -397,8 +417,8 @@ def server(input, output, session):
                 # Plot all trims
                 for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
                     ax.plot(
-                        trim_df['Q [m³/h]'],
-                        trim_df['P2 [kW]'],
+                        trim_df[Q_COLUMN],
+                        trim_df[P2_COLUMN],
                         marker='o',
                         linestyle='-',
                         label=f"Speed: {int(speed)} RPM"
@@ -410,8 +430,8 @@ def server(input, output, session):
                     if speed in selected_curve.trim_curves:
                         trim_df = selected_curve.trim_curves[speed]
                         ax.plot(
-                            trim_df['Q [m³/h]'],
-                            trim_df['P2 [kW]'],
+                            trim_df[Q_COLUMN],
+                            trim_df[P2_COLUMN],
                             marker='o',
                             linestyle='-',
                             label=f"Speed: {speed} RPM"
@@ -460,8 +480,8 @@ def server(input, output, session):
                 # Plot all trims
                 for speed, trim_df in reversed(list(selected_curve.trim_curves.items())):
                     ax.plot(
-                        trim_df['Q [m³/h]'],
-                        trim_df['NPSH [m]'],
+                        trim_df[Q_COLUMN],
+                        trim_df[NPSH_COLUMN],
                         marker='o',
                         linestyle='-',
                         label=f"Speed: {int(speed)} RPM"
@@ -473,8 +493,8 @@ def server(input, output, session):
                     if speed in selected_curve.trim_curves:
                         trim_df = selected_curve.trim_curves[speed]
                         ax.plot(
-                            trim_df['Q [m³/h]'],
-                            trim_df['NPSH [m]'],
+                            trim_df[Q_COLUMN],
+                            trim_df[NPSH_COLUMN],
                             marker='o',
                             linestyle='-',
                             label=f"Speed: {speed} RPM"
@@ -502,79 +522,39 @@ def server(input, output, session):
     @render.text
     @reactive.event(input.create_psd_file)
     def psd_creation():
-        import os
-        import shutil
         from openpyxl import load_workbook
 
-        # This points to the curve PSD template to be used
-        templateDir = r"C:\Users\104092\OneDrive - Grundfos\Documents\3 - RESOURCES\32 GXS"
-        template = "SKB Blank Curve PSD - Power_Metric.xlsx"
-        template = os.path.join(templateDir, template)
+        pump_family_name = input.pump_family()  # Get the pump family from the input
+        output_psd_file = f"{pump_family_name} - Curve PSD.xlsx"
 
-        # Create a local working copy to leave template unmodified
-        product = input.pump_family()  # Get the pump family from the input
-        output_psd_file = product + ' - Curve PSD.xlsx'
-        workingCopy = shutil.copyfile(template, output_psd_file)
-        wb = load_workbook(workingCopy)      
+        # Create a working copy of the template
+        output_file_path = create_working_copy(TEMPLATE_PATH, output_psd_file)
+        wb = load_workbook(output_file_path)
 
-        # Add 1 curve tab to workbook for every curve found
-        group_objects = get_group_objects()  # Get the group_objects dictionary
-        for object_name in group_objects:
-            curve_pn = group_objects[object_name].pn
-            wb.copy_worksheet(wb['NEW']).title = curve_pn # Creates and renames blank PSD Tab as template for each new curve tab
+        # Get group objects
+        group_objects = get_group_objects()
+
+        # Copy and rename worksheets
+        copy_and_rename_worksheets(wb, group_objects)
 
         # Apply speed correction if enabled
         group_objects = apply_speed_correction(group_objects, "Yes" in input.speed_correct())
 
-        # Fill PSD 
+        # Fill PSD data
         for object_name in group_objects:
-            curveSheet = wb[group_objects[object_name].pn]
-            baseCell = 'D7' # Fill Curve, power/eff, NPSH data
-            first_row_offset = 3
+            curve = group_objects[object_name]
+            curve_sheet = wb[curve.pn]
+            fill_curve_data(curve_sheet, base_cell='D7', trims=curve.trims, trim_curves=curve.trim_curves)
 
-            # Fill Speed or trim in column A
-            trims = group_objects[object_name].trims
-            for index, eachSpeedTrim in enumerate(trims):
-                cell_name = "{}{}".format('A', 10+index)
-                curveSheet[cell_name].value = int(eachSpeedTrim)
+        # Fill header data
+        header_sheet = wb["Curve Header Data"]
+        header_sheet['B7'] = input.pump_family()  # Fill Pump Family
+        fill_header_data(header_sheet, base_cell='A1', group_objects=group_objects)
 
-                curve_data_df = group_objects[object_name].trim_curves[eachSpeedTrim].reset_index()
-                for key, value in curve_data_df.iterrows():
-                    # print(f'first_row_offset {first_row_offset}, key: {key + 21*index}')
-                    curveSheet[baseCell].offset(first_row_offset + key, 0 + 21*index).value = round(value['Q [m³/h]'],3)
-                    curveSheet[baseCell].offset(first_row_offset + key, 1 + 21*index).value = round(value['H [m]'], 3)
-                    curveSheet[baseCell].offset(first_row_offset + key, 7 + 21*index).value = round(value['Q [m³/h]'], 3)
-                    # curveSheet[baseCell].offset(first_row_offset + key, 8 + 21*index).value = value['Eta1']
-                    curveSheet[baseCell].offset(first_row_offset + key, 8 + 21*index).value = round(value['P2 [kW]'], 3)
-                    curveSheet[baseCell].offset(first_row_offset + key,14 + 21*index).value = round(value['Q [m³/h]'], 3)
-                    curveSheet[baseCell].offset(first_row_offset + key,15 + 21*index).value = round(value['NPSH [m]'], 3)
+        # Save the workbook
+        wb.save(output_file_path)
 
-        sheet = wb["Curve Header Data"]
-        sheet['B7'] = input.pump_family()  # Fill Pump Family
-        baseCell = 'A1' 
-        first_row_offset = 10
-
-        for index, object_name in enumerate(group_objects):
-            df = group_objects[object_name].df
-            max_speed = int(max(group_objects[object_name].trims))
-            min_speed = int(min(group_objects[object_name].trims))
-                    
-            sheet[baseCell].offset((first_row_offset + index), 0).value = group_objects[object_name].pn
-            sheet[baseCell].offset((first_row_offset + index), 2).value = df.iloc[0]['RPM(Pump data)']
-            sheet[baseCell].offset((first_row_offset + index), 3).value = group_objects[object_name].calc_poles
-            sheet[baseCell].offset((first_row_offset + index), 4).value = group_objects[object_name].frequency
-            sheet[baseCell].offset((first_row_offset + index), 6).value = df.iloc[0]['RPM(Curve nominal)']
-            sheet[baseCell].offset((first_row_offset + index), 7).value = min_speed
-            sheet[baseCell].offset((first_row_offset + index), 8).value = max_speed
-            sheet[baseCell].offset((first_row_offset + index), 9).value = '0' # Diameter Increment
-            # sheet[baseCell].offset((first_row_offset + index), 10).value = group_objects[object_name].get_mcsf('min')
-            # sheet[baseCell].offset((first_row_offset + index), 11).value = group_objects[object_name].get_mcsf('max')
-            sheet[baseCell].offset((first_row_offset + index), 15).value = 'Round up' # Final diameter strategy # 'Round up'Round to nearest'
-            sheet[baseCell].offset((first_row_offset + index), 21).value = min_speed
-
-        wb.save(workingCopy)
-
-        return "Created " + output_psd_file
+        return f"Created {output_psd_file}"
 
 
     @render.text
@@ -692,10 +672,10 @@ def server(input, output, session):
         
         def get_impeller_trim(curve_number:str):
             # Filter the DataFrame based on a condition in 'column1'
-            condition = df_selected['ProductNumber'] == curve_number
+            condition = df_selected[PRODUCT_NUMBER_COLUMN] == curve_number
 
             # result = df.loc[condition, 'Cylindrical\nimpeller']
-            result = df_selected.loc[condition, 'RPM(Curve nominal)'] 
+            result = df_selected.loc[condition, RPM_COLUMN] 
             result = result.to_list()
             return(result[0])
 
@@ -754,7 +734,7 @@ def server(input, output, session):
                     datapoint_dict = {
                         # 'x': metric_to_us(row['Flow'], "flow"),
                         # 'y': metric_to_us(row[curve_type], 'power'),
-                        'x': row['Q [m³/h]'],
+                        'x': row[Q_COLUMN],
                         'y': row['Eta1'],
                         'isOnCurve':'false',
                         'division':'false',
@@ -766,8 +746,8 @@ def server(input, output, session):
                     datapoint_dict = {
                         # 'x': metric_to_us(row['Flow'], "flow"),
                         # 'y': metric_to_us(row[curve_type], 'power'),
-                        'x': row['Q [m³/h]'],
-                        'y': row['P2 [kW]'],
+                        'x': row[Q_COLUMN],
+                        'y': row[P2_COLUMN],
                         'isOnCurve':'false',
                         'division':'false',
                         'useCubicSplines':'false',
@@ -778,8 +758,8 @@ def server(input, output, session):
                     datapoint_dict = {
                         # 'x': metric_to_us(row['Flow'], "flow"),
                         # 'y': metric_to_us(row[curve_type], 'distance'),
-                        'x': row['Q [m³/h]'],
-                        'y': row['H [m]'],
+                        'x': row[Q_COLUMN],
+                        'y': row[H_COLUMN],
                         'isOnCurve':'false',
                         'division':'false',
                         'useCubicSplines':'true',
@@ -790,8 +770,8 @@ def server(input, output, session):
                     datapoint_dict = {
                         # 'x': metric_to_us(row['Flow'], "flow"),
                         # 'y': metric_to_us(row[curve_type], 'distance'),
-                        'x': row['Q [m³/h]'],
-                        'y': row['NPSH [m]'],
+                        'x': row[Q_COLUMN],
+                        'y': row[NPSH_COLUMN],
                         'isOnCurve':'false',
                         'division':'false',
                         'useCubicSplines':'false',
@@ -944,6 +924,91 @@ def server(input, output, session):
             ui.update_text("pump_family", value=pump_family_name)  # Update the pump_family field
         else:
             ui.update_text("pump_family", value="")  # Clear the pump_family field if no product is selected
+
+
+    def calculate_speed_range(trims):
+        """Calculate max and min speeds from trims."""
+        return int(max(trims)), int(min(trims))
+
+
+    def create_working_copy(template_path, output_filename):
+        """
+        Creates a working copy of the template file.
+
+        Args:
+            template_path (str): Path to the template file.
+            output_filename (str): Name of the output file.
+
+        Returns:
+            str: Path to the working copy.
+        """
+        import shutil
+        return shutil.copyfile(template_path, output_filename)
+
+
+    def copy_and_rename_worksheets(workbook, group_objects):
+        """
+        Copies and renames worksheets for each curve.
+
+        Args:
+            workbook: OpenPyXL workbook object.
+            group_objects (dict): Dictionary of Curve objects.
+        """
+        for object_name in group_objects:
+            curve_pn = group_objects[object_name].pn
+            workbook.copy_worksheet(workbook['NEW']).title = curve_pn
+
+
+    def fill_curve_data(sheet, base_cell, trims, trim_curves):
+        """
+        Fills curve data into the worksheet.
+
+        Args:
+            sheet: OpenPyXL worksheet object.
+            base_cell (str): Base cell for data entry.
+            trims (list): List of trims/speeds.
+            trim_curves (dict): Dictionary of trim DataFrames.
+        """
+        first_row_offset = 3
+        for index, each_speed_trim in enumerate(trims):
+            cell_name = "{}{}".format('A', 10 + index)
+            sheet[cell_name].value = int(each_speed_trim)
+
+            curve_data_df = trim_curves[each_speed_trim].reset_index()
+            for key, value in curve_data_df.iterrows():
+                sheet[base_cell].offset(first_row_offset + key, 0 + 21 * index).value = round(value[Q_COLUMN], 3)
+                sheet[base_cell].offset(first_row_offset + key, 1 + 21 * index).value = round(value[H_COLUMN], 3)
+                sheet[base_cell].offset(first_row_offset + key, 7 + 21 * index).value = round(value[Q_COLUMN], 3)
+                sheet[base_cell].offset(first_row_offset + key, 8 + 21 * index).value = round(value[P2_COLUMN], 3)
+                sheet[base_cell].offset(first_row_offset + key, 14 + 21 * index).value = round(value[Q_COLUMN], 3)
+                sheet[base_cell].offset(first_row_offset + key, 15 + 21 * index).value = round(value[NPSH_COLUMN], 3)
+
+
+    def fill_header_data(sheet, base_cell, group_objects):
+        """
+        Fills header data into the worksheet.
+
+        Args:
+            sheet: OpenPyXL worksheet object.
+            base_cell (str): Base cell for data entry.
+            group_objects (dict): Dictionary of Curve objects.
+        """
+        first_row_offset = 10
+        for index, object_name in enumerate(group_objects):
+            curve = group_objects[object_name]
+            df = curve.df
+            max_speed, min_speed = calculate_speed_range(curve.trims)
+
+            sheet[base_cell].offset((first_row_offset + index), 0).value = curve.pn
+            sheet[base_cell].offset((first_row_offset + index), 2).value = df.iloc[0][RPM_PUMP_DATA_COLUMN]
+            sheet[base_cell].offset((first_row_offset + index), 3).value = curve.calc_poles
+            sheet[base_cell].offset((first_row_offset + index), 4).value = curve.frequency
+            sheet[base_cell].offset((first_row_offset + index), 6).value = df.iloc[0][RPM_COLUMN]
+            sheet[base_cell].offset((first_row_offset + index), 7).value = min_speed
+            sheet[base_cell].offset((first_row_offset + index), 8).value = max_speed
+            sheet[base_cell].offset((first_row_offset + index), 9).value = '0'  # Diameter Increment
+            sheet[base_cell].offset((first_row_offset + index), 15).value = 'Round up'  # Final diameter strategy
+            sheet[base_cell].offset((first_row_offset + index), 21).value = min_speed
 
 
     output.df_preview = df_preview
