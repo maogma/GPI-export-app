@@ -906,6 +906,46 @@ def server(input, output, session):
 
         return group_objects  # Return the updated group_objects
 
+
+    def extract_pump_family(product_name):
+        """
+        Extracts the pump family name from the product name.
+
+        Args:
+            product_name (str): The product name string (e.g., "NBE 015-070/6.93").
+
+        Returns:
+            str: The pump family name (e.g., "NBE").
+        """
+        if not isinstance(product_name, str) or not product_name:
+            return None  # Return None if the input is invalid
+
+        # Split the product name by spaces and return the first word
+        return product_name.split()[0]
+
+
+    @reactive.effect
+    def update_pump_family():
+        group_objects = get_group_objects()  # Get the group_objects dictionary
+        if group_objects is None:
+            print("No group objects available.")
+            ui.update_text("pump_family", value="")  # Clear the pump_family field
+            return
+
+        # Get the selected ProductNumber from the dropdown
+        selected_product_number = input.model_select()
+
+        # Check if the selected ProductNumber exists in group_objects
+        if selected_product_number in group_objects:
+            selected_curve = group_objects[selected_product_number]
+
+            # Extract the pump family name from the Product name column
+            pump_family_name = extract_pump_family(selected_curve.model)  # Use the helper function
+            ui.update_text("pump_family", value=pump_family_name)  # Update the pump_family field
+        else:
+            ui.update_text("pump_family", value="")  # Clear the pump_family field if no product is selected
+
+
     output.df_preview = df_preview
 
 app = App(app_ui, server)
